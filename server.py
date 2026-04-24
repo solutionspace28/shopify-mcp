@@ -929,7 +929,56 @@ async def shopify_create_webhook(params: CreateWebhookInput) -> str:
     except Exception as e:
         return _error(e)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# UPDATE ORDER
+# ═══════════════════════════════════════════════════════════════════════════
 
+class ShippingAddressInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    first_name: Optional[str] = Field(default=None)
+    last_name:  Optional[str] = Field(default=None)
+    address1:   Optional[str] = Field(default=None)
+    address2:   Optional[str] = Field(default=None)
+    city:       Optional[str] = Field(default=None)
+    province:   Optional[str] = Field(default=None)
+    zip:        Optional[str] = Field(default=None)
+    country:    Optional[str] = Field(default=None)
+    phone:      Optional[str] = Field(default=None)
+    company:    Optional[str] = Field(default=None)
+
+
+class UpdateOrderInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    order_id:         int                             = Field(..., description="Order ID to update")
+    note:             Optional[str]                   = Field(default=None, description="Order note")
+    tags:             Optional[str]                   = Field(default=None, description="Comma-separated tags")
+    email:            Optional[str]                   = Field(default=None, description="Customer email")
+    shipping_address: Optional[ShippingAddressInput]  = Field(default=None, description="Updated shipping address")
+
+
+@mcp.tool(
+    name="shopify_update_order",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_update_order(params: UpdateOrderInput) -> str:
+    """Update an existing order. Supports note, tags, email, and shipping address."""
+    try:
+        order: Dict[str, Any] = {"id": params.order_id}
+        for field in ["note", "tags", "email"]:
+            val = getattr(params, field)
+            if val is not None:
+                order[field] = val
+        if params.shipping_address is not None:
+            addr: Dict[str, Any] = {}
+            for field in ["first_name", "last_name", "address1", "address2", "city", "province", "zip", "country", "phone", "company"]:
+                val = getattr(params.shipping_address, field)
+                if val is not None:
+                    addr[field] = val
+            order["shipping_address"] = addr
+        data = await _request("PUT", f"orders/{params.order_id}.json", body={"order": order})
+        return _fmt(data.get("order", data))
+    except Exception as e:
+        return _error(e)
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
